@@ -1,0 +1,72 @@
+# Using the Scheduler Integration (HACS)
+# Install from: https://github.com/nielsfaber/scheduler-component
+
+# Example configuration for scheduler integration
+
+scheduler:
+  # Bedroom Schedule
+  - name: "Bedroom Heating Schedule"
+    entity: climate.bedroom_tado_local_offset
+
+    # Monday to Friday
+    workday_schedule:
+      - time: "06:30"
+        temperature: 21.0
+      - time: "08:00"
+        temperature: 18.0  # Away
+      - time: "18:00"
+        temperature: 22.0  # Home
+      - time: "22:00"
+        temperature: 19.0  # Sleep
+
+    # Weekend
+    weekend_schedule:
+      - time: "08:00"
+        temperature: 21.0
+      - time: "22:00"
+        temperature: 19.0
+
+# ============================================
+# ALTERNATIVE: Manual Scheduler Card Config
+# ============================================
+# Add this to your Lovelace dashboard:
+
+# type: custom:scheduler-card
+# discover_existing: true
+# include:
+#   - climate.bedroom_tado_local_offset
+#   - climate.living_room_tado_local_offset
+#   - climate.office_tado_local_offset
+
+# ============================================
+# Pre-heat with Scheduler (Advanced)
+# ============================================
+# Create an automation that triggers before scheduler events
+
+automations:
+  - alias: "Scheduler Pre-heat Helper"
+    description: "Trigger pre-heat 90 minutes before any scheduler heating event"
+    trigger:
+      - platform: state
+        entity_id:
+          - schedule.bedroom_heating_schedule
+          - schedule.living_room_heating_schedule
+    variables:
+      # Get the next scheduled temperature change
+      next_event: "{{ state_attr(trigger.entity_id, 'next_trigger') }}"
+      next_temp: "{{ state_attr(trigger.entity_id, 'next_temperature') }}"
+      climate_entity: "{{ trigger.entity_id | replace('schedule.', 'climate.') | replace('_heating_schedule', '_tado_local_offset') }}"
+    condition:
+      # Only pre-heat if temperature is increasing
+      - condition: template
+        value_template: "{{ next_temp > state_attr(climate_entity, 'current_temperature') }}"
+    action:
+      # Wait until 90 minutes before the scheduled event
+      - delay:
+          minutes: >
+            {{ ((as_timestamp(next_event) - as_timestamp(now())) / 60) - 90 }}
+      - service: tado_local_offset.set_preheat
+        data:
+          entity_id: "{{ climate_entity }}"
+          target_time: "{{ next_event }}"
+          target_temperature: "{{ next_temp }}"

@@ -1,0 +1,140 @@
+# Advanced schedules with adaptive pre-heat
+# The integration calculates when to start heating based on learned heating rate
+
+automations:
+  # ============================================
+  # MORNING SCHEDULE - Room ready by 7:00 AM
+  # ============================================
+  # Integration will automatically start heating early enough
+  # based on current room temp and learned heating rate
+
+  - alias: "Bedroom Morning Pre-heat"
+    description: "Bedroom should be 21°C by 7:00 AM when alarm goes off"
+    trigger:
+      # Run this automation early enough to allow for pre-heat
+      # The service will calculate if it needs to start now or wait
+      - platform: time
+        at: "05:30:00"  # 1.5 hours before target - safe buffer
+    action:
+      - service: tado_local_offset.set_preheat
+        data:
+          entity_id: climate.bedroom_tado_local_offset
+          target_time: "{{ today_at('07:00') }}"
+          target_temperature: 21.0
+
+  # ============================================
+  # ALTERNATIVE: Dynamic morning based on alarm
+  # ============================================
+  # If you use a smart alarm (e.g., Sleep as Android, phone alarm)
+
+  - alias: "Bedroom Pre-heat Before Alarm"
+    description: "Start heating 90 minutes before alarm"
+    trigger:
+      - platform: state
+        entity_id: sensor.phone_next_alarm  # Your alarm sensor
+    condition:
+      - condition: template
+        value_template: >
+          {{ trigger.to_state.state not in ['unavailable', 'unknown'] }}
+    action:
+      - service: tado_local_offset.set_preheat
+        data:
+          entity_id: climate.bedroom_tado_local_offset
+          target_time: "{{ states('sensor.phone_next_alarm') }}"
+          target_temperature: 21.0
+
+  # ============================================
+  # EVENING SCHEDULE - Room ready when home
+  # ============================================
+
+  - alias: "Living Room Evening Pre-heat"
+    description: "Living room warm by 18:30 when arriving home"
+    trigger:
+      - platform: time
+        at: "17:00:00"  # 1.5 hours before
+    action:
+      - service: tado_local_offset.set_preheat
+        data:
+          entity_id: climate.living_room_tado_local_offset
+          target_time: "{{ today_at('18:30') }}"
+          target_temperature: 22.0
+
+  # ============================================
+  # PRESENCE-BASED PRE-HEAT
+  # ============================================
+  # Start heating before you arrive home
+
+  - alias: "Pre-heat on Way Home"
+    description: "Start heating when leaving work"
+    trigger:
+      - platform: zone
+        entity_id: person.christian
+        zone: zone.work
+        event: leave
+    action:
+      # Calculate arrival time (e.g., 30 minutes from now)
+      - service: tado_local_offset.set_preheat
+        data:
+          entity_id: climate.living_room_tado_local_offset
+          target_time: "{{ now() + timedelta(minutes=30) }}"
+          target_temperature: 22.0
+
+  # ============================================
+  # WEEKEND VS WEEKDAY SCHEDULES
+  # ============================================
+
+  - alias: "Bedroom Weekday Morning Pre-heat"
+    description: "Early wake-up on workdays"
+    trigger:
+      - platform: time
+        at: "05:30:00"
+    condition:
+      - condition: time
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+    action:
+      - service: tado_local_offset.set_preheat
+        data:
+          entity_id: climate.bedroom_tado_local_offset
+          target_time: "{{ today_at('07:00') }}"
+          target_temperature: 21.0
+
+  - alias: "Bedroom Weekend Morning Pre-heat"
+    description: "Sleep in on weekends"
+    trigger:
+      - platform: time
+        at: "07:30:00"
+    condition:
+      - condition: time
+        weekday:
+          - sat
+          - sun
+    action:
+      - service: tado_local_offset.set_preheat
+        data:
+          entity_id: climate.bedroom_tado_local_offset
+          target_time: "{{ today_at('09:00') }}"
+          target_temperature: 21.0
+
+  # ============================================
+  # ECONOMY MODES (No pre-heat needed)
+  # ============================================
+  # When lowering temperature, just set it directly
+
+  - alias: "All Rooms Night Economy"
+    trigger:
+      - platform: time
+        at: "22:30:00"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id:
+            - climate.bedroom_tado_local_offset
+            - climate.living_room_tado_local_offset
+            - climate.office_tado_local_offset
+        data:
+          temperature: 18.0

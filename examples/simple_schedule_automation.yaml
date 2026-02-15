@@ -1,0 +1,51 @@
+# Simple schedules without pre-heat
+# These change the temperature at the specified time
+
+automations:
+  # Morning - Bedroom warms up at 6:30 AM
+  - alias: "Bedroom Morning Heat"
+    trigger:
+      - platform: time
+        at: "06:30:00"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.bedroom_tado_local_offset
+        data:
+          temperature: 21.0
+
+  # Day - Lower temperature at 8:00 AM (after leaving)
+  - alias: "Bedroom Day Economy"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.bedroom_tado_local_offset
+        data:
+          temperature: 18.0
+
+  # Evening - Warm up at 18:00
+  - alias: "Bedroom Evening Heat"
+    trigger:
+      - platform: time
+        at: "18:00:00"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.bedroom_tado_local_offset
+        data:
+          temperature: 22.0
+
+  # Night - Lower for sleeping at 22:00
+  - alias: "Bedroom Night Economy"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.bedroom_tado_local_offset
+        data:
+          temperature: 19.0

@@ -1,0 +1,63 @@
+# Services for Tado Local Offset integration
+
+force_compensation:
+  name: Force compensation
+  description: Force immediate compensation update, bypassing backoff timer and tolerance checks (still respects window detection).
+  fields:
+    entity_id:
+      name: Entity
+      description: Climate entity to force compensation for. Leave empty for all.
+      required: false
+      example: "climate.bedroom_virtual"
+      selector:
+        entity:
+          domain: climate
+          integration: tado_local_offset
+          multiple: true
+
+reset_learning:
+  name: Reset learning
+  description: Clear heating cycle history and restart learning from default values.
+  fields:
+    entity_id:
+      name: Entity
+      description: Climate entity to reset learning for. Leave empty for all.
+      required: false
+      example: "climate.bedroom_virtual"
+      selector:
+        entity:
+          domain: climate
+          integration: tado_local_offset
+          multiple: true
+
+set_preheat:
+  name: Set pre-heat
+  description: Manually trigger pre-heat for upcoming schedule using learned heating rate.
+  fields:
+    entity_id:
+      name: Entity
+      description: Climate entity to trigger pre-heat for.
+      required: true
+      example: "climate.bedroom_virtual"
+      selector:
+        entity:
+          domain: climate
+          integration: tado_local_offset
+    target_time:
+      name: Target time
+      description: When the room should reach target temperature.
+      required: true
+      example: "2024-01-15 07:00:00"
+      selector:
+        datetime:
+    target_temperature:
+      name: Target temperature
+      description: Desired temperature in Celsius.
+      required: true
+      example: 21.0
+      selector:
+        number:
+          min: 5
+          max: 25
+          step: 0.5
+          unit_of_measurement: "°C"

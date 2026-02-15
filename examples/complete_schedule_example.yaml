@@ -1,0 +1,396 @@
+# ============================================================================
+# COMPLETE WORKING EXAMPLE - Tado Local Offset Scheduling
+# ============================================================================
+# Copy this to your automations.yaml and customize room names and times
+#
+# Assumptions:
+# - You have configured: bedroom, living_room, office via the integration
+# - External sensors are accurate
+# - Integration has been running for at least 7 days (for learning)
+# ============================================================================
+
+# ============================================================================
+# BEDROOM SCHEDULE
+# ============================================================================
+
+# Morning: Wake up to warm room (WEEKDAYS)
+- id: bedroom_weekday_morning_preheat
+  alias: "Bedroom Weekday Morning Pre-heat"
+  description: "Bedroom should be 21°C by 06:30 on workdays"
+  trigger:
+    - platform: time
+      at: "04:30:00"  # 2 hours before target (safe buffer)
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.bedroom_tado_local_offset
+        target_time: "{{ today_at('06:30') }}"
+        target_temperature: 21.0
+
+# Morning: Wake up to warm room (WEEKENDS)
+- id: bedroom_weekend_morning_preheat
+  alias: "Bedroom Weekend Morning Pre-heat"
+  description: "Bedroom should be 20°C by 08:30 on weekends"
+  trigger:
+    - platform: time
+      at: "06:30:00"
+  condition:
+    - condition: time
+      weekday: [sat, sun]
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.bedroom_tado_local_offset
+        target_time: "{{ today_at('08:30') }}"
+        target_temperature: 20.0
+
+# Day: Lower temperature after leaving (WEEKDAYS)
+- id: bedroom_weekday_economy
+  alias: "Bedroom Weekday Economy"
+  description: "Lower bedroom temp during work hours"
+  trigger:
+    - platform: time
+      at: "08:00:00"
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.bedroom_tado_local_offset
+      data:
+        temperature: 17.0
+
+# Night: Lower for sleeping
+- id: bedroom_night_economy
+  alias: "Bedroom Night Economy"
+  description: "Lower temp for comfortable sleeping"
+  trigger:
+    - platform: time
+      at: "22:00:00"
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.bedroom_tado_local_offset
+      data:
+        temperature: 18.5
+
+# ============================================================================
+# LIVING ROOM SCHEDULE
+# ============================================================================
+
+# Morning: Warm for breakfast (WEEKDAYS)
+- id: living_room_weekday_morning
+  alias: "Living Room Weekday Morning"
+  description: "Living room warm by 07:00"
+  trigger:
+    - platform: time
+      at: "05:00:00"
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.living_room_tado_local_offset
+        target_time: "{{ today_at('07:00') }}"
+        target_temperature: 20.0
+
+# Morning: Later wake-up (WEEKENDS)
+- id: living_room_weekend_morning
+  alias: "Living Room Weekend Morning"
+  description: "Living room warm by 09:00 on weekends"
+  trigger:
+    - platform: time
+      at: "07:00:00"
+  condition:
+    - condition: time
+      weekday: [sat, sun]
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.living_room_tado_local_offset
+        target_time: "{{ today_at('09:00') }}"
+        target_temperature: 21.0
+
+# Day: Economy mode (WEEKDAYS - at work)
+- id: living_room_weekday_economy
+  alias: "Living Room Weekday Economy"
+  description: "Lower temp during work hours"
+  trigger:
+    - platform: time
+      at: "08:30:00"
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.living_room_tado_local_offset
+      data:
+        temperature: 17.0
+
+# Evening: Pre-heat before arrival (WEEKDAYS)
+- id: living_room_weekday_evening_preheat
+  alias: "Living Room Weekday Evening Pre-heat"
+  description: "Living room warm by 18:00 when home from work"
+  trigger:
+    - platform: time
+      at: "16:00:00"
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.living_room_tado_local_offset
+        target_time: "{{ today_at('18:00') }}"
+        target_temperature: 22.0
+
+# Evening: Cozy temperature (ALL DAYS)
+- id: living_room_evening_comfort
+  alias: "Living Room Evening Comfort"
+  description: "Extra warm for evening relaxation"
+  trigger:
+    - platform: time
+      at: "19:00:00"
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.living_room_tado_local_offset
+      data:
+        temperature: 22.5
+
+# Night: Lower for sleeping
+- id: living_room_night_economy
+  alias: "Living Room Night Economy"
+  description: "Lower living room temp at night"
+  trigger:
+    - platform: time
+      at: "23:00:00"
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.living_room_tado_local_offset
+      data:
+        temperature: 18.0
+
+# ============================================================================
+# OFFICE SCHEDULE (Home Office)
+# ============================================================================
+
+# Morning: Warm before work starts (WEEKDAYS)
+- id: office_weekday_morning_preheat
+  alias: "Office Weekday Morning Pre-heat"
+  description: "Office warm by 08:30 for work"
+  trigger:
+    - platform: time
+      at: "06:30:00"
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.office_tado_local_offset
+        target_time: "{{ today_at('08:30') }}"
+        target_temperature: 21.0
+
+# Lunch break: Lower slightly
+- id: office_lunch_economy
+  alias: "Office Lunch Economy"
+  description: "Lower temp during lunch break"
+  trigger:
+    - platform: time
+      at: "12:00:00"
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.office_tado_local_offset
+      data:
+        temperature: 19.0
+
+# After lunch: Warm up again
+- id: office_afternoon_preheat
+  alias: "Office Afternoon Pre-heat"
+  description: "Office warm by 13:00 after lunch"
+  trigger:
+    - platform: time
+      at: "12:40:00"
+  condition:
+    - condition: time
+      weekday: [mon, tue, wed, thu, fri]
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.office_tado_local_offset
+        target_time: "{{ today_at('13:00') }}"
+        target_temperature: 21.0
+
+# Evening: Work done, lower temp
+- id: office_evening_economy
+  alias: "Office Evening Economy"
+  description: "Lower office temp after work"
+  trigger:
+    - platform: time
+      at: "17:30:00"
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.office_tado_local_offset
+      data:
+        temperature: 17.0
+
+# Weekend: Keep low (not using office)
+- id: office_weekend_economy
+  alias: "Office Weekend Economy"
+  description: "Keep office cold on weekends"
+  trigger:
+    - platform: time
+      at: "08:00:00"
+  condition:
+    - condition: time
+      weekday: [sat, sun]
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.office_tado_local_offset
+      data:
+        temperature: 16.0
+
+# ============================================================================
+# SMART FEATURES
+# ============================================================================
+
+# Window opened: Immediate shutoff (All rooms)
+# Note: This is automatic via the integration's window detection
+# No automation needed! Just configure window sensors in the integration.
+
+# Away mode: Lower all rooms when nobody home (Optional)
+- id: away_mode_all_rooms_economy
+  alias: "Away Mode - All Rooms Economy"
+  description: "Lower all rooms when everyone leaves"
+  trigger:
+    - platform: state
+      entity_id: zone.home
+      to: "0"  # Nobody home
+      for:
+        minutes: 30
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id:
+          - climate.bedroom_tado_local_offset
+          - climate.living_room_tado_local_offset
+          - climate.office_tado_local_offset
+      data:
+        temperature: 16.0
+
+# Back home: Return to schedule
+- id: home_mode_restore
+  alias: "Home Mode - Restore Comfort"
+  description: "Warm up rooms when someone arrives home"
+  trigger:
+    - platform: state
+      entity_id: zone.home
+      to: "1"  # Someone home
+  action:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.living_room_tado_local_offset
+        target_time: "{{ now() + timedelta(minutes=30) }}"
+        target_temperature: 21.0
+
+# Force compensation every 6 hours (maintenance)
+- id: force_compensation_maintenance
+  alias: "Force Compensation Maintenance"
+  description: "Ensure compensation runs regularly"
+  trigger:
+    - platform: time_pattern
+      hours: "/6"  # Every 6 hours
+  action:
+    - service: tado_local_offset.force_compensation
+      data:
+        entity_id: all
+
+# ============================================================================
+# DEBUGGING / MONITORING (Optional - for testing)
+# ============================================================================
+
+# Notify when pre-heat is triggered
+- id: notify_preheat_triggered
+  alias: "Notify Pre-heat Triggered"
+  description: "Send notification when pre-heat starts (disable after testing)"
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id:
+        - sensor.bedroom_preheat_time
+        - sensor.living_room_preheat_time
+        - sensor.office_preheat_time
+  condition:
+    - condition: template
+      value_template: "{{ trigger.to_state.state | int > 0 }}"
+  action:
+    - service: persistent_notification.create
+      data:
+        title: "Pre-heat Active"
+        message: >
+          {{ trigger.to_state.name }} will start heating.
+          Time needed: {{ trigger.to_state.state }} minutes
+          Current temp: {{ state_attr(trigger.entity_id | replace('sensor.', 'climate.') | replace('_preheat_time', '_tado_local_offset'), 'current_temperature') }}°C
+
+# ============================================================================
+# SCRIPTS (Reusable)
+# ============================================================================
+
+# Quick boost: Heat room to 23°C for 2 hours
+quick_boost_bedroom:
+  alias: "Quick Boost - Bedroom"
+  sequence:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.bedroom_tado_local_offset
+      data:
+        temperature: 23.0
+    - delay:
+        hours: 2
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.bedroom_tado_local_offset
+      data:
+        temperature: 20.0
+
+# Morning routine: Pre-heat all main rooms
+morning_preheat_all:
+  alias: "Morning Pre-heat All Rooms"
+  sequence:
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.bedroom_tado_local_offset
+        target_time: "{{ today_at('07:00') }}"
+        target_temperature: 21.0
+    - service: tado_local_offset.set_preheat
+      data:
+        entity_id: climate.living_room_tado_local_offset
+        target_time: "{{ today_at('07:30') }}"
+        target_temperature: 20.0
+
+# Night mode: Lower all rooms
+night_mode_all:
+  alias: "Night Mode - All Rooms"
+  sequence:
+    - service: climate.set_temperature
+      target:
+        entity_id:
+          - climate.bedroom_tado_local_offset
+          - climate.living_room_tado_local_offset
+          - climate.office_tado_local_offset
+      data:
+        temperature: 18.0

@@ -1,0 +1,12 @@
+{
+  "domain": "tado_local_offset",
+  "name": "Tado Local Offset",
+  "codeowners": ["@czepter"],
+  "config_flow": true,
+  "documentation": "https://github.com/czepter/ha-tado-local-offset",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/czepter/ha-tado-local-offset/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
