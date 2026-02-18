@@ -128,9 +128,11 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
         # Special handling for desired_temperature: use async update path
         if self.entity_description.key == "desired_temperature":
             await self.coordinator.async_set_desired_temperature(value)
-            # Ensure UI updates reflect the change
-            await self.coordinator.async_request_refresh()
         else:
             # For other values (tolerance, backoff), use synchronous setter
             self.entity_description.set_fn(self.coordinator, value)
-            await self.coordinator.async_request_refresh()
+        
+        # Always notify the coordinator to refresh and update UI
+        await self.coordinator.async_request_refresh()
+        # Force immediate state update to frontend
+        self.async_write_ha_state()
