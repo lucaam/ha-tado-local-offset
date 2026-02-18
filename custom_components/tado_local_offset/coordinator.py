@@ -448,7 +448,16 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     async def async_set_desired_temperature(self, temperature: float) -> None:
         """Set desired temperature and trigger compensation."""
+        old_temp = self.data.desired_temp
         self.data.desired_temp = max(MIN_TEMP, min(MAX_TEMP, temperature))
+        
+        self.logger.info(
+            "Desired temperature changed for %s: %.1f°C → %.1f°C",
+            self.room_name,
+            old_temp,
+            self.data.desired_temp,
+        )
+        
         await self.async_calculate_and_apply_compensation()
 
     async def async_calculate_and_apply_compensation(self, force: bool = False) -> None:
