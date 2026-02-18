@@ -134,6 +134,17 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # Initialize data
         self.data = TadoLocalOffsetData()
 
+    @staticmethod
+    def _is_valid_float_state(state_value: str | None) -> bool:
+        """Check if state value can be safely converted to float."""
+        if not state_value:
+            return False
+        try:
+            float(state_value)
+            return True
+        except (ValueError, TypeError):
+            return False
+
     async def _async_update_data(self) -> TadoLocalOffsetData:
         """Fetch data from sensors and calculate compensation."""
         try:
@@ -152,12 +163,35 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             if not tado_climate_state or tado_climate_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
                 raise UpdateFailed(f"Tado climate entity {self.tado_climate_entity} unavailable")
 
+            # Validate that states are convertible to float before attempting conversion
+            if not self._is_valid_float_state(external_temp_state.state):
+                raise UpdateFailed(
+                    f"External temperature sensor {self.external_temp_sensor} value not a number: {external_temp_state.state!r}"
+                )
+
+            if not self._is_valid_float_state(tado_temp_state.state):
+                raise UpdateFailed(
+                    f"Tado temperature sensor {self.tado_temp_sensor} value not a number: {tado_temp_state.state!r}"
+                )
+
             # Parse temperatures
             try:
                 external_temp = float(external_temp_state.state)
                 tado_temp = float(tado_temp_state.state)
             except (ValueError, TypeError) as err:
-                raise UpdateFailed(f"Invalid temperature value: {err}") from err
+                # Log which sensor failed and its actual state
+                self.logger.error(
+                    "Temperature sensor parsing failed for %s: "
+                    "external_sensor=%s (state=%r), "
+                    "tado_sensor=%s (state=%r). Error: %s",
+                    self.room_name,
+                    self.external_temp_sensor,
+                    external_temp_state.state if external_temp_state else None,
+                    self.tado_temp_sensor,
+                    tado_temp_state.state if tado_temp_state else None,
+                    err,
+                )
+                raise UpdateFailed(f"Invalid temperature value for {self.room_name}: {err}") from err
 
             # Update data
             self.data.external_temp = external_temp
