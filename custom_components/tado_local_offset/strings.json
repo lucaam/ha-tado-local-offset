@@ -17,16 +17,16 @@
       },
       "window_detection": {
         "title": "Window Detection",
-        "description": "Configure automatic heating shutoff when windows are opened.",
+        "description": "Configure automatic heating shutoff when windows or doors are opened.",
         "data": {
           "enable_window_detection": "Enable window detection",
-          "window_sensor": "Window contact sensor (optional)",
+          "window_sensor": "Window/door contact sensor (optional)",
           "enable_temp_drop_detection": "Enable temperature drop detection",
           "temp_drop_threshold": "Temperature drop threshold (°C)"
         },
         "data_description": {
           "enable_window_detection": "Use physical window sensor for detection",
-          "window_sensor": "Binary sensor that indicates window is open",
+          "window_sensor": "Binary sensor that indicates window or door is open",
           "enable_temp_drop_detection": "Detect open windows via sudden temperature drops",
           "temp_drop_threshold": "Temperature drop in °C that triggers detection"
         }
@@ -64,6 +64,7 @@
     },
     "error": {
       "device_not_found": "Selected device not found. Please try again.",
+      "not_tado_device": "Selected device is not a Tado device.",
       "no_climate_entity": "No climate entity found for this device.",
       "no_temp_sensor": "No temperature sensor found for this device."
     },

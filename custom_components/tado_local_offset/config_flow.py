@@ -45,6 +45,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+TADO_MANUFACTURER = "tado"
 
 
 class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -55,6 +56,67 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize config flow."""
         self._data: dict[str, Any] = {}
+
+    @staticmethod
+    def _normalize_manufacturer(value: str | None) -> str:
+        """Normalize manufacturer string for reliable matching."""
+        if not value:
+            return ""
+        return "".join(char for char in value.lower() if char.isalnum())
+
+    def _is_tado_device(self, device: dr.DeviceEntry) -> bool:
+        """Check if selected HomeKit device belongs to Tado."""
+        normalized = self._normalize_manufacturer(device.manufacturer)
+        return TADO_MANUFACTURER in normalized
+
+    @staticmethod
+    def _is_temperature_sensor_entity(entry: er.RegistryEntry) -> bool:
+        """Return True if entity registry entry looks like a temperature sensor."""
+        if entry.domain != "sensor":
+            return False
+
+        device_class = (entry.device_class or "").lower()
+        original_device_class = (entry.original_device_class or "").lower()
+        if device_class == "temperature" or original_device_class == "temperature":
+            return True
+
+        # Fallback for HomeKit entities that miss device_class metadata
+        tokens = " ".join(
+            filter(
+                None,
+                [
+                    entry.entity_id,
+                    entry.original_name,
+                    entry.name,
+                    entry.unique_id,
+                ],
+            )
+        ).lower()
+        return "temperature" in tokens and "humidity" not in tokens
+
+    @staticmethod
+    def _is_humidity_sensor_entity(entry: er.RegistryEntry) -> bool:
+        """Return True if entity registry entry looks like a humidity sensor."""
+        if entry.domain != "sensor":
+            return False
+
+        device_class = (entry.device_class or "").lower()
+        original_device_class = (entry.original_device_class or "").lower()
+        if device_class == "humidity" or original_device_class == "humidity":
+            return True
+
+        tokens = " ".join(
+            filter(
+                None,
+                [
+                    entry.entity_id,
+                    entry.original_name,
+                    entry.name,
+                    entry.unique_id,
+                ],
+            )
+        ).lower()
+        return "humidity" in tokens
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -75,6 +137,8 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not device:
                 errors["base"] = "device_not_found"
+            elif not self._is_tado_device(device):
+                errors["base"] = "not_tado_device"
             else:
                 # Get all entities for this device
                 entities = er.async_entries_for_device(entity_registry, device.id)
@@ -88,14 +152,14 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Find temperature sensor
                 temp_sensor = next(
                     (e for e in entities
-                     if e.domain == "sensor" and e.original_device_class == "temperature"),
+                     if self._is_temperature_sensor_entity(e)),
                     None
                 )
 
                 # Find humidity sensor
                 humidity_sensor = next(
                     (e for e in entities
-                     if e.domain == "sensor" and e.original_device_class == "humidity"),
+                     if self._is_humidity_sensor_entity(e)),
                     None
                 )
 
@@ -128,7 +192,6 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_TADO_DEVICE): selector.DeviceSelector(
                 selector.DeviceSelectorConfig(
                     integration="homekit_controller",
-                    manufacturer="tado",
                 )
             ),
             vol.Required(CONF_EXTERNAL_TEMP_SENSOR): selector.EntitySelector(
@@ -159,7 +222,6 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_WINDOW_SENSOR): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="binary_sensor",
-                    device_class="window",
                 )
             ),
             vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=False): bool,

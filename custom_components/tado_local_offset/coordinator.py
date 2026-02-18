@@ -268,7 +268,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # Check physical sensor first
         if self.enable_window_detection and self.window_sensor:
             window_state = self.hass.states.get(self.window_sensor)
-            if window_state and window_state.state == STATE_ON:
+            if self._is_opening_sensor_open(window_state):
                 return True
 
         # Check temperature drop detection
@@ -276,6 +276,18 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             return self._detect_temperature_drop()
 
         return False
+
+    @staticmethod
+    def _is_opening_sensor_open(sensor_state: State | None) -> bool:
+        """Return True when a window/door contact sensor reports open."""
+        if not sensor_state:
+            return False
+
+        state_value = (sensor_state.state or "").strip().lower()
+        if state_value in {STATE_UNAVAILABLE, STATE_UNKNOWN, "none", "null", ""}:
+            return False
+
+        return state_value in {STATE_ON, "open", "opened", "true", "1"}
 
     def _detect_temperature_drop(self) -> bool:
         """Detect window opening via sudden temperature drop."""
