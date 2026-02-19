@@ -80,6 +80,8 @@ def _get_coordinator_room_name(coordinator: TadoLocalOffsetCoordinator) -> str:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Tado Local Offset from a config entry."""
+    _LOGGER.info("Setting up Tado Local Offset for room: %s", entry.data[CONF_ROOM_NAME])
+    
     # Create coordinator
     coordinator = TadoLocalOffsetCoordinator(hass, entry)
 
@@ -96,6 +98,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services (only once)
     if not hass.services.has_service(DOMAIN, SERVICE_FORCE_COMPENSATION):
         async_register_services(hass)
+        _LOGGER.info("Registered Tado Local Offset services")
 
     # Register update listener for options
     entry.async_on_unload(entry.add_update_listener(async_update_options))

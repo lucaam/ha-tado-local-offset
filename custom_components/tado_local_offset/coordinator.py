@@ -241,13 +241,23 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             self.data.hvac_action = tado_climate_state.attributes.get("hvac_action", "idle")
             self.data.last_update = dt_util.utcnow()
 
+            # Initial sync on first update: sync desired_temp from actual Tado target
+            if self._last_sent_compensated_target is None:
+                self.data.desired_temp = self.data.tado_target
+                self.logger.info(
+                    "Initial sync for %s: desired_temp = %.1f°C (from Tado target)",
+                    self.room_name,
+                    self.data.desired_temp,
+                )
+
             # Log sensor readings at DEBUG level (frequent updates)
             self.logger.debug(
-                "Sensor update for %s: external=%.1f°C, tado=%.1f°C, target=%.1f°C",
+                "Sensor update for %s: external=%.1f°C, tado=%.1f°C, target=%.1f°C, desired=%.1f°C",
                 self.room_name,
                 external_temp,
                 tado_temp,
                 self.data.tado_target,
+                self.data.desired_temp,
             )
 
             # Calculate offset
