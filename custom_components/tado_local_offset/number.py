@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature, UnitOfTime
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -123,6 +123,18 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
         """Return the current value."""
         return self.entity_description.get_fn(self.coordinator)
 
+    async def async_added_to_hass(self) -> None:
+        """Register update listener when entity is added to Home Assistant."""
+        await super().async_added_to_hass()
+        
+        # Add a direct listener for coordinator updates to ensure state sync
+        self.coordinator.async_add_listener(self._handle_coordinator_update)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle coordinator update by writing state to Home Assistant."""
+        self.async_write_ha_state()
+
     async def async_set_native_value(self, value: float) -> None:
         """Set the value."""
         # Special handling for desired_temperature: use async update path
@@ -132,7 +144,5 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
             # For other values (tolerance, backoff), use synchronous setter
             self.entity_description.set_fn(self.coordinator, value)
         
-        # Always notify the coordinator to refresh and update UI
+        # Trigger refresh to update coordinator data
         await self.coordinator.async_request_refresh()
-        # Force immediate state update to frontend
-        self.async_write_ha_state()
