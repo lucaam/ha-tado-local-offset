@@ -1,6 +1,7 @@
 """Number platform for Tado Local Offset."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -28,6 +29,8 @@ from .const import (
     get_device_info,
 )
 from .coordinator import TadoLocalOffsetCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -151,9 +154,32 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
         """
         # Special handling for desired_temperature: use async update path
         if self.entity_description.key == "desired_temperature":
-            await self.coordinator.async_set_desired_temperature(value)
+            # Clamp value to valid range before setting
+            clamped_value = max(self.native_min_value, min(self.native_max_value, value))
+            
+            if clamped_value != value:
+                _LOGGER.info(
+                    "Desired temperature clamped from %.1f°C to %.1f°C (valid range: %.1f-%.1f°C)",
+                    value,
+                    clamped_value,
+                    self.native_min_value,
+                    self.native_max_value,
+                )
+            
+            _LOGGER.debug(
+                "Setting desired temperature for %s to %.1f°C",
+                self._room_name,
+                clamped_value,
+            )
+            await self.coordinator.async_set_desired_temperature(clamped_value)
         else:
             # For other values (tolerance, backoff), use synchronous setter
+            _LOGGER.debug(
+                "Setting %s for %s to %.1f",
+                self.entity_description.key,
+                self._room_name,
+                value,
+            )
             self.entity_description.set_fn(self.coordinator, value)
         
         # Trigger refresh to update coordinator data

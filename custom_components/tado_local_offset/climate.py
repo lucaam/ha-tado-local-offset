@@ -139,7 +139,14 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
         temperature = kwargs.get(ATTR_TEMPERATURE)
 
         if temperature is None:
+            _LOGGER.warning("Climate set_temperature called without temperature value")
             return
+
+        _LOGGER.debug(
+            "Climate entity set_temperature called for %s: %.1f°C",
+            self._room_name,
+            temperature,
+        )
 
         # Store desired temperature and trigger compensation
         await self.coordinator.async_set_desired_temperature(temperature)
