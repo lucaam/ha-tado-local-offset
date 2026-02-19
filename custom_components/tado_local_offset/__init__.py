@@ -19,6 +19,7 @@ from .const import (
     SERVICE_FORCE_COMPENSATION,
     SERVICE_RESET_LEARNING,
     SERVICE_SET_PREHEAT,
+    get_climate_entity_id,
 )
 from .coordinator import TadoLocalOffsetCoordinator
 
@@ -44,6 +45,37 @@ SERVICE_SET_PREHEAT_SCHEMA = vol.Schema(
         vol.Required(ATTR_TARGET_TEMPERATURE): vol.Coerce(float),
     }
 )
+
+
+def _get_coordinator_for_entity(
+    hass: HomeAssistant, entity_id: str
+) -> TadoLocalOffsetCoordinator | None:
+    """Find coordinator for a given climate entity ID.
+    
+    Args:
+        hass: Home Assistant instance
+        entity_id: The climate entity ID to find coordinator for
+        
+    Returns:
+        The coordinator for the entity, or None if not found
+    """
+    coordinators = hass.data[DOMAIN].values()
+    for coordinator in coordinators:
+        if get_climate_entity_id(coordinator.room_name) == entity_id:
+            return coordinator
+    return None
+
+
+def _get_coordinator_room_name(coordinator: TadoLocalOffsetCoordinator) -> str:
+    """Get the room name from a coordinator.
+    
+    Args:
+        coordinator: The coordinator instance
+        
+    Returns:
+        The room name
+    """
+    return coordinator.room_name
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -84,81 +116,88 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update options."""
+    """Update options.
+    
+    Args:
+        hass: Home Assistant instance
+        entry: Config entry that was updated
+    """
     await hass.config_entries.async_reload(entry.entry_id)
 
 
 def async_register_services(hass: HomeAssistant) -> None:
-    """Register integration services."""
+    """Register integration services.
+    
+    Args:
+        hass: Home Assistant instance
+    """
 
     async def handle_force_compensation(call: ServiceCall) -> None:
-        """Handle force compensation service call."""
+        """Handle force compensation service call.
+        
+        Forces immediate temperature compensation, bypassing the backoff timer.
+        """
         entity_ids = call.data.get(ATTR_ENTITY_ID)
-
-        # Get all coordinators
-        coordinators = hass.data[DOMAIN].values()
+        coordinators = list(hass.data[DOMAIN].values())
 
         # Filter by entity_id if specified
         if entity_ids:
-            # Get climate entity IDs for filtering
-            climate_entity_ids = set()
-            for coordinator in coordinators:
-                climate_entity_id = f"climate.{coordinator.room_name.lower().replace(' ', '_')}_virtual"
-                climate_entity_ids.add(climate_entity_id)
-
-            # Only process coordinators whose climate entities were specified
             coordinators = [
                 coord for coord in coordinators
-                if f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual" in entity_ids
+                if get_climate_entity_id(coord.room_name) in entity_ids
             ]
 
-        # Execute force compensation
+        if not coordinators:
+            _LOGGER.warning(
+                "Force compensation: no matching entities found for %s", entity_ids
+            )
+            return
+
         for coordinator in coordinators:
+            _LOGGER.info("Force compensation triggered for %s", coordinator.room_name)
             await coordinator.async_force_compensation()
             await coordinator.async_request_refresh()
 
     async def handle_reset_learning(call: ServiceCall) -> None:
-        """Handle reset learning service call."""
+        """Handle reset learning service call.
+        
+        Clears the heating cycle history and resets learning data.
+        """
         entity_ids = call.data.get(ATTR_ENTITY_ID)
-
-        # Get all coordinators
-        coordinators = hass.data[DOMAIN].values()
+        coordinators = list(hass.data[DOMAIN].values())
 
         # Filter by entity_id if specified
         if entity_ids:
-            climate_entity_ids = set()
-            for coordinator in coordinators:
-                climate_entity_id = f"climate.{coordinator.room_name.lower().replace(' ', '_')}_virtual"
-                climate_entity_ids.add(climate_entity_id)
-
             coordinators = [
                 coord for coord in coordinators
-                if f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual" in entity_ids
+                if get_climate_entity_id(coord.room_name) in entity_ids
             ]
 
-        # Execute reset learning
+        if not coordinators:
+            _LOGGER.warning("Reset learning: no matching entities found for %s", entity_ids)
+            return
+
         for coordinator in coordinators:
+            _LOGGER.info("Learning data reset for %s", coordinator.room_name)
             await coordinator.async_reset_learning()
             await coordinator.async_request_refresh()
 
     async def handle_set_preheat(call: ServiceCall) -> None:
-        """Handle set preheat service call."""
+        """Handle set preheat service call.
+        
+        Manually schedules pre-heating for an upcoming target time and temperature.
+        """
         entity_id = call.data[ATTR_ENTITY_ID]
         target_time = call.data[ATTR_TARGET_TIME]
         target_temperature = call.data[ATTR_TARGET_TEMPERATURE]
 
         # Find coordinator for this entity
-        coordinators = hass.data[DOMAIN].values()
-        coordinator = None
-
-        for coord in coordinators:
-            climate_entity_id = f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual"
-            if climate_entity_id == entity_id:
-                coordinator = coord
-                break
+        coordinator = _get_coordinator_for_entity(hass, entity_id)
 
         if not coordinator:
-            _LOGGER.error("No coordinator found for entity %s", entity_id)
+            _LOGGER.error(
+                "Set preheat: no coordinator found for entity %s", entity_id
+            )
             return
 
         # Calculate time until target
@@ -167,7 +206,10 @@ def async_register_services(hass: HomeAssistant) -> None:
         time_until = (target_time - now).total_seconds() / 60  # minutes
 
         if time_until <= 0:
-            _LOGGER.warning("Target time is in the past")
+            _LOGGER.warning(
+                "Set preheat for %s: target time is in the past",
+                coordinator.room_name,
+            )
             return
 
         # Calculate pre-heat start time
@@ -185,7 +227,8 @@ def async_register_services(hass: HomeAssistant) -> None:
             )
         else:
             _LOGGER.info(
-                "Pre-heat for %s will start in %.0f minutes (%.0f minutes before target time)",
+                "Pre-heat for %s will start in %.0f minutes "
+                "(%.0f minutes before target time)",
                 coordinator.room_name,
                 time_until - preheat_minutes,
                 preheat_minutes,

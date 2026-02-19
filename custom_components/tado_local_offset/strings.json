@@ -66,7 +66,8 @@
       "device_not_found": "Selected device not found. Please try again.",
       "not_tado_device": "Selected device is not a Tado device.",
       "no_climate_entity": "No climate entity found for this device.",
-      "no_temp_sensor": "No temperature sensor found for this device."
+      "no_temp_sensor": "No temperature sensor found for this device.",
+      "invalid_preheat_range": "Minimum pre-heat time must be less than maximum pre-heat time."
     },
     "abort": {
       "already_configured": "This room is already configured."

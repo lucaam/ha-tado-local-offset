@@ -8,17 +8,24 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_ROOM_NAME, DOMAIN, MANUFACTURER, MODEL
+from .const import CONF_ROOM_NAME, DOMAIN, MANUFACTURER, MODEL, get_device_info
 from .coordinator import TadoLocalOffsetCoordinator
 
 
 @dataclass(frozen=True, kw_only=True)
 class TadoLocalOffsetSwitchDescription(SwitchEntityDescription):
-    """Describes Tado Local Offset switch entity."""
+    """Describes Tado Local Offset switch entity.
+    
+    Attributes:
+        key: Unique identifier for the switch entity
+        name: Display name for the entity
+        get_fn: Function to get the current state from coordinator
+        set_fn: Function to set the state on the coordinator
+    """
 
     set_fn: Callable[[TadoLocalOffsetCoordinator, bool], None]
     get_fn: Callable[[TadoLocalOffsetCoordinator], bool]
@@ -78,21 +85,21 @@ class TadoLocalOffsetSwitch(CoordinatorEntity[TadoLocalOffsetCoordinator], Switc
         entry: ConfigEntry,
         description: TadoLocalOffsetSwitchDescription,
     ) -> None:
-        """Initialize the switch."""
+        """Initialize the switch.
+        
+        Args:
+            coordinator: The data coordinator
+            entry: The config entry
+            description: The switch entity description
+        """
         super().__init__(coordinator)
 
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._room_name = entry.data[CONF_ROOM_NAME]
 
-        # Set up device info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=f"{self._room_name} Virtual Thermostat",
-            manufacturer=MANUFACTURER,
-            model=MODEL,
-            sw_version="0.1.0",
-        )
+        # Set up device info using centralized helper
+        self._attr_device_info = get_device_info(entry, MANUFACTURER, MODEL)
 
     @property
     def is_on(self) -> bool:
@@ -100,11 +107,19 @@ class TadoLocalOffsetSwitch(CoordinatorEntity[TadoLocalOffsetCoordinator], Switc
         return self.entity_description.get_fn(self.coordinator)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn the switch on."""
+        """Turn the switch on.
+        
+        Args:
+            **kwargs: Additional keyword arguments
+        """
         self.entity_description.set_fn(self.coordinator, True)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn the switch off."""
+        """Turn the switch off.
+        
+        Args:
+            **kwargs: Additional keyword arguments
+        """
         self.entity_description.set_fn(self.coordinator, False)
         await self.coordinator.async_request_refresh()

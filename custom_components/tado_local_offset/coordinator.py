@@ -1,6 +1,7 @@
 """Data update coordinator for Tado Local Offset."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -52,6 +53,8 @@ from .const import (
     UPDATE_INTERVAL,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @dataclass
 class HeatingCycle:
@@ -92,10 +95,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
     """Class to manage fetching Tado Local Offset data."""
 
     def __init__(self, hass: HomeAssistant, entry: dict[str, Any]) -> None:
-        """Initialize the coordinator."""
+        """Initialize the coordinator.
+        
+        Args:
+            hass: Home Assistant instance
+            entry: Config entry for this integration
+        """
         super().__init__(
             hass,
-            logger := __import__("logging").getLogger(__name__),
+            _LOGGER,
             name=f"{DOMAIN}_{entry.data[CONF_ROOM_NAME]}",
             update_interval=UPDATE_INTERVAL,
         )
@@ -121,7 +129,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.min_preheat_minutes = entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15)
         self.max_preheat_minutes = entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120)
 
-        # Internal state
+        # Internal state - thread-safe through async pattern
         self._last_compensation_time: datetime | None = None
         self._last_sent_compensated_target: float | None = None
         self._heating_start_time: datetime | None = None
@@ -136,7 +144,14 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     @staticmethod
     def _is_valid_float_state(state_value: str | None) -> bool:
-        """Check if state value can be safely converted to float."""
+        """Check if state value can be safely converted to float.
+        
+        Args:
+            state_value: The state value to validate
+            
+        Returns:
+            True if the value can be converted to float
+        """
         if not state_value:
             return False
         try:
@@ -145,53 +160,78 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         except (ValueError, TypeError):
             return False
 
+    def _parse_temperature(
+        self, state: State | None, sensor_name: str
+    ) -> float:
+        """Parse temperature from Home Assistant state.
+        
+        Args:
+            state: The entity state object
+            sensor_name: Name of the sensor for logging
+            
+        Returns:
+            Parsed temperature value
+            
+        Raises:
+            UpdateFailed: If state is unavailable or not a valid number
+        """
+        if not state or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            raise UpdateFailed(f"{sensor_name} unavailable")
+
+        if not self._is_valid_float_state(state.state):
+            raise UpdateFailed(
+                f"{sensor_name} invalid value: {state.state!r}"
+            )
+
+        try:
+            return float(state.state)
+        except (ValueError, TypeError) as err:
+            self.logger.error(
+                "Failed to parse temperature from %s (state=%r): %s",
+                sensor_name,
+                state.state,
+                err,
+            )
+            raise UpdateFailed(f"Invalid temperature from {sensor_name}") from err
+
     async def _async_update_data(self) -> TadoLocalOffsetData:
-        """Fetch data from sensors and calculate compensation."""
+        """Fetch data from sensors and calculate compensation.
+        
+        This method:
+        1. Retrieves current temperature and climate state from sensors
+        2. Validates all values are available and numeric
+        3. Detects external target changes (schedules, manual adjustments)
+        4. Updates temperature history for drop detection
+        5. Checks window status via sensor or temperature analysis
+        6. Tracks heating cycles for learning
+        7. Calculates pre-heat time if enabled
+        8. Applies compensation if conditions are met
+        
+        Returns:
+            Updated coordinator data
+            
+        Raises:
+            UpdateFailed: If any sensor is unavailable or has invalid data
+        """
         try:
             # Get current sensor states
             external_temp_state = self.hass.states.get(self.external_temp_sensor)
             tado_temp_state = self.hass.states.get(self.tado_temp_sensor)
             tado_climate_state = self.hass.states.get(self.tado_climate_entity)
 
-            # Validate states
-            if not external_temp_state or external_temp_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-                raise UpdateFailed(f"External temperature sensor {self.external_temp_sensor} unavailable")
-
-            if not tado_temp_state or tado_temp_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-                raise UpdateFailed(f"Tado temperature sensor {self.tado_temp_sensor} unavailable")
-
+            # Validate climate entity exists
             if not tado_climate_state or tado_climate_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
                 raise UpdateFailed(f"Tado climate entity {self.tado_climate_entity} unavailable")
 
-            # Validate that states are convertible to float before attempting conversion
-            if not self._is_valid_float_state(external_temp_state.state):
-                raise UpdateFailed(
-                    f"External temperature sensor {self.external_temp_sensor} value not a number: {external_temp_state.state!r}"
-                )
-
-            if not self._is_valid_float_state(tado_temp_state.state):
-                raise UpdateFailed(
-                    f"Tado temperature sensor {self.tado_temp_sensor} value not a number: {tado_temp_state.state!r}"
-                )
-
-            # Parse temperatures
-            try:
-                external_temp = float(external_temp_state.state)
-                tado_temp = float(tado_temp_state.state)
-            except (ValueError, TypeError) as err:
-                # Log which sensor failed and its actual state
-                self.logger.error(
-                    "Temperature sensor parsing failed for %s: "
-                    "external_sensor=%s (state=%r), "
-                    "tado_sensor=%s (state=%r). Error: %s",
-                    self.room_name,
-                    self.external_temp_sensor,
-                    external_temp_state.state if external_temp_state else None,
-                    self.tado_temp_sensor,
-                    tado_temp_state.state if tado_temp_state else None,
-                    err,
-                )
-                raise UpdateFailed(f"Invalid temperature value for {self.room_name}: {err}") from err
+            # Parse temperatures using centralized method
+            external_temp = self._parse_temperature(
+                external_temp_state, 
+                f"External temperature sensor ({self.external_temp_sensor})"
+            )
+            tado_temp = self._parse_temperature(
+                tado_temp_state,
+                f"Tado temperature sensor ({self.tado_temp_sensor})"
+            )
 
             # Update data
             self.data.external_temp = external_temp
@@ -200,6 +240,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             self.data.hvac_mode = tado_climate_state.state
             self.data.hvac_action = tado_climate_state.attributes.get("hvac_action", "idle")
             self.data.last_update = dt_util.utcnow()
+
+            # Log sensor readings at DEBUG level (frequent updates)
+            self.logger.debug(
+                "Sensor update for %s: external=%.1f°C, tado=%.1f°C, target=%.1f°C",
+                self.room_name,
+                external_temp,
+                tado_temp,
+                self.data.tado_target,
+            )
 
             # Calculate offset
             self.data.offset = external_temp - tado_temp
@@ -231,7 +280,12 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         except UpdateFailed:
             raise
         except Exception as err:
-            raise UpdateFailed(f"Error updating Tado Local Offset data: {err}") from err
+            self.logger.error(
+                "Error updating Tado Local Offset data for %s: %s",
+                self.room_name,
+                err,
+            )
+            raise UpdateFailed(f"Error updating {self.room_name}: {err}") from err
 
     def _detect_external_target_change(self) -> bool:
         """Detect if Tado's target was changed externally (schedule, manual, app).
@@ -298,16 +352,23 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         ]
 
     def _check_window_open(self) -> bool:
-        """Check if window is open via sensor or temperature drop."""
+        """Check if window is open via sensor or temperature drop.
+        
+        Returns:
+            True if window is detected as open, False otherwise
+        """
         # Check physical sensor first
         if self.enable_window_detection and self.window_sensor:
             window_state = self.hass.states.get(self.window_sensor)
             if self._is_opening_sensor_open(window_state):
+                self.logger.debug("Window open detected via sensor for %s", self.room_name)
                 return True
 
         # Check temperature drop detection
         if self.enable_temp_drop_detection:
-            return self._detect_temperature_drop()
+            if self._detect_temperature_drop():
+                self.logger.info("Window open detected via temperature drop for %s", self.room_name)
+                return True
 
         return False
 

@@ -1,12 +1,18 @@
 """Constants for the Tado Local Offset integration."""
 from datetime import timedelta
-from typing import Final
+from typing import Final, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
 
 # Integration domain
 DOMAIN: Final = "tado_local_offset"
 
 # Platforms
 PLATFORMS: Final = ["climate", "sensor", "binary_sensor", "number", "switch"]
+
+# Manufacturer
+TADO_MANUFACTURER: Final = "tado"
 
 # Configuration keys
 CONF_ROOM_NAME: Final = "room_name"
@@ -85,3 +91,38 @@ STORAGE_VERSION: Final = 1
 # Device info
 MANUFACTURER: Final = "Tado Local Offset"
 MODEL: Final = "Virtual Thermostat"
+
+
+# Helper functions
+def get_climate_entity_id(room_name: str) -> str:
+    """Get climate entity ID for a room."""
+    return f"climate.{room_name.lower().replace(' ', '_')}_virtual"
+
+
+def get_device_info(
+    entry: "ConfigEntry",
+    manufacturer: str = MANUFACTURER,
+    model: str = MODEL,
+    sw_version: str = "0.1.0",
+) -> dict:
+    """Get device info dict for a room entry.
+    
+    Args:
+        entry: The config entry for this integration
+        manufacturer: Device manufacturer name
+        model: Device model name
+        sw_version: Software version
+        
+    Returns:
+        Dictionary with device identifiers and info
+    """
+    from homeassistant.helpers.entity import DeviceInfo
+    
+    room_name = entry.data.get("room_name", "Unknown")
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=f"{room_name} Virtual Thermostat",
+        manufacturer=manufacturer,
+        model=model,
+        sw_version=sw_version,
+    )

@@ -9,7 +9,7 @@ from homeassistant.components.number import NumberEntity, NumberEntityDescriptio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -25,16 +25,24 @@ from .const import (
     MIN_TEMP,
     MIN_TOLERANCE,
     MODEL,
+    get_device_info,
 )
 from .coordinator import TadoLocalOffsetCoordinator
 
 
 @dataclass(frozen=True, kw_only=True)
 class TadoLocalOffsetNumberDescription(NumberEntityDescription):
-    """Describes Tado Local Offset number entity."""
+    """Describes Tado Local Offset number entity.
+    
+    Attributes:
+        key: Unique identifier for the number entity
+        name: Display name for the entity
+        get_fn: Function to get the current value from coordinator
+        set_fn: Function to set the value on the coordinator
+    """
 
-    set_fn: Callable[[TadoLocalOffsetCoordinator, float], None]
     get_fn: Callable[[TadoLocalOffsetCoordinator], float]
+    set_fn: Callable[[TadoLocalOffsetCoordinator, float], None]
 
 
 NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
@@ -46,8 +54,8 @@ NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
         native_max_value=MAX_TEMP,
         native_step=0.5,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        set_fn=lambda coord, value: setattr(coord.data, "desired_temp", value),
         get_fn=lambda coord: coord.data.desired_temp,
+        set_fn=lambda coord, value: setattr(coord.data, "desired_temp", value),
     ),
     TadoLocalOffsetNumberDescription(
         key="tolerance",
@@ -58,8 +66,8 @@ NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
         native_max_value=MAX_TOLERANCE,
         native_step=0.1,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        set_fn=lambda coord, value: setattr(coord, "tolerance", value),
         get_fn=lambda coord: coord.tolerance,
+        set_fn=lambda coord, value: setattr(coord, "tolerance", value),
     ),
     TadoLocalOffsetNumberDescription(
         key="backoff_minutes",
@@ -70,8 +78,8 @@ NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
         native_max_value=MAX_BACKOFF,
         native_step=5,
         native_unit_of_measurement=UnitOfTime.MINUTES,
-        set_fn=lambda coord, value: setattr(coord, "backoff_minutes", int(value)),
         get_fn=lambda coord: float(coord.backoff_minutes),
+        set_fn=lambda coord, value: setattr(coord, "backoff_minutes", int(value)),
     ),
 )
 
@@ -102,21 +110,21 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
         entry: ConfigEntry,
         description: TadoLocalOffsetNumberDescription,
     ) -> None:
-        """Initialize the number."""
+        """Initialize the number.
+        
+        Args:
+            coordinator: The data coordinator
+            entry: The config entry
+            description: The number entity description
+        """
         super().__init__(coordinator)
 
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._room_name = entry.data[CONF_ROOM_NAME]
 
-        # Set up device info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=f"{self._room_name} Virtual Thermostat",
-            manufacturer=MANUFACTURER,
-            model=MODEL,
-            sw_version="0.1.0",
-        )
+        # Set up device info using centralized helper
+        self._attr_device_info = get_device_info(entry, MANUFACTURER, MODEL)
 
     @property
     def native_value(self) -> float:
@@ -136,7 +144,11 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
         self.async_write_ha_state()
 
     async def async_set_native_value(self, value: float) -> None:
-        """Set the value."""
+        """Set the value.
+        
+        Args:
+            value: The new value to set
+        """
         # Special handling for desired_temperature: use async update path
         if self.entity_description.key == "desired_temperature":
             await self.coordinator.async_set_desired_temperature(value)

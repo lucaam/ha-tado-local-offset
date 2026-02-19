@@ -17,7 +17,6 @@ from homeassistant.components.climate.const import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -29,6 +28,7 @@ from .const import (
     MAX_TEMP,
     MIN_TEMP,
     MODEL,
+    get_device_info,
 )
 from .coordinator import TadoLocalOffsetCoordinator
 
@@ -61,20 +61,19 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
         coordinator: TadoLocalOffsetCoordinator,
         entry: ConfigEntry,
     ) -> None:
-        """Initialize the climate entity."""
+        """Initialize the climate entity.
+        
+        Args:
+            coordinator: The data coordinator
+            entry: The config entry
+        """
         super().__init__(coordinator)
 
         self._attr_unique_id = f"{entry.entry_id}_climate"
         self._room_name = entry.data[CONF_ROOM_NAME]
 
-        # Set up device info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=f"{self._room_name} Virtual Thermostat",
-            manufacturer=MANUFACTURER,
-            model=MODEL,
-            sw_version="0.1.0",
-        )
+        # Set up device info using centralized helper
+        self._attr_device_info = get_device_info(entry, MANUFACTURER, MODEL)
 
         # Temperature limits
         self._attr_min_temp = MIN_TEMP
@@ -130,7 +129,13 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
         }
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
+        """Set new target temperature.
+        
+        Updates the desired temperature and triggers compensation.
+        
+        Args:
+            **kwargs: Additional keyword arguments (contains ATTR_TEMPERATURE)
+        """
         temperature = kwargs.get(ATTR_TEMPERATURE)
 
         if temperature is None:
@@ -143,7 +148,11 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
         await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set HVAC mode - proxy to real Tado."""
+        """Set HVAC mode - proxy to real Tado.
+        
+        Args:
+            hvac_mode: The desired HVAC mode
+        """
         # Map HVAC mode to Tado state
         if hvac_mode == HVACMode.HEAT:
             tado_mode = "heat"

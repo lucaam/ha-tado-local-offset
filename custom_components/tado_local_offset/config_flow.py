@@ -42,10 +42,10 @@ from .const import (
     MAX_TOLERANCE,
     MIN_BACKOFF,
     MIN_TOLERANCE,
+    TADO_MANUFACTURER,
 )
 
 _LOGGER = logging.getLogger(__name__)
-TADO_MANUFACTURER = "tado"
 
 
 class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -266,14 +266,25 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Handle pre-heat settings."""
+        errors: dict[str, str] = {}
+        
         if user_input is not None:
-            self._data.update(user_input)
+            # Cross-field validation
+            if user_input.get(CONF_ENABLE_PREHEAT):
+                min_preheat = user_input.get(CONF_MIN_PREHEAT_MINUTES, DEFAULT_MIN_PREHEAT_MINUTES)
+                max_preheat = user_input.get(CONF_MAX_PREHEAT_MINUTES, DEFAULT_MAX_PREHEAT_MINUTES)
+                
+                if min_preheat >= max_preheat:
+                    errors["base"] = "invalid_preheat_range"
+            
+            if not errors:
+                self._data.update(user_input)
 
-            # Create config entry
-            return self.async_create_entry(
-                title=self._data[CONF_ROOM_NAME],
-                data=self._data,
-            )
+                # Create config entry
+                return self.async_create_entry(
+                    title=self._data[CONF_ROOM_NAME],
+                    data=self._data,
+                )
 
         # Show form
         data_schema = vol.Schema({
@@ -295,6 +306,7 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="preheat",
             data_schema=data_schema,
+            errors=errors,
         )
 
     @staticmethod
@@ -302,16 +314,19 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> TadoLocalOffsetOptionsFlow:
-        """Get the options flow for this handler."""
-        return TadoLocalOffsetOptionsFlow(config_entry)
+        """Get the options flow for this handler.
+        
+        Args:
+            config_entry: The config entry (managed by framework)
+            
+        Returns:
+            The options flow instance
+        """
+        return TadoLocalOffsetOptionsFlow()
 
 
 class TadoLocalOffsetOptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for Tado Local Offset."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
