@@ -135,6 +135,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._heating_start_time: datetime | None = None
         self._heating_start_temp: float | None = None
         self._temp_history: list[tuple[datetime, float]] = []
+        self._initial_sync_done: bool = False
 
         # Cooldown after compensation to let HomeKit state propagate (seconds)
         self._external_change_cooldown: float = 90.0
@@ -242,8 +243,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             self.data.last_update = dt_util.utcnow()
 
             # Initial sync on first update: sync desired_temp from actual Tado target
-            if self._last_sent_compensated_target is None:
+            if not self._initial_sync_done:
                 self.data.desired_temp = self.data.tado_target
+                self._initial_sync_done = True
                 self.logger.info(
                     "Initial sync for %s: desired_temp = %.1f°C (from Tado target)",
                     self.room_name,
