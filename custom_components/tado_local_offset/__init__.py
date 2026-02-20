@@ -14,6 +14,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import (
     ATTR_TARGET_TEMPERATURE,
     ATTR_TARGET_TIME,
+    CONF_ROOM_NAME,
     DOMAIN,
     PLATFORMS,
     SERVICE_FORCE_COMPENSATION,
